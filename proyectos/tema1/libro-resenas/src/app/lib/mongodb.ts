@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://agus:<db_password>@cluster0.vnqsiow.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+const MONGODB_URI = process.env.MONGODB_URI;
 
 type MongooseCache = {
   conn: typeof mongoose | null;
@@ -12,13 +12,21 @@ declare global {
   var mongoose: MongooseCache | undefined;
 }
 
-let cached: MongooseCache = global.mongoose ?? { conn: null, promise: null };
+let cached = (global as any).mongoose ?? { conn: null, promise: null };
 global.mongoose = cached;
 
 export async function connectMongo() {
+  if (!MONGODB_URI) {
+    throw new Error("MONGODB_URI no está definido en las variables de entorno.");
+  }
   if (cached.conn) return cached.conn;
   if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGODB_URI).then((mongoose) => mongoose);
+    cached.promise = mongoose.connect(MONGODB_URI)
+    .then((mongoose) => mongoose)
+    .catch((err) => {
+      console.error("Error al conectar a MongoDB Atlas:", err);
+      throw new Error("No se pudo conectar a la base de datos. Revisa tu string de conexión y permisos en Atlas.");
+    });
   }
   cached.conn = await cached.promise;
   return cached.conn;
