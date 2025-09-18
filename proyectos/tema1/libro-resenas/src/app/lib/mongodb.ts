@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
 
 const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+  throw new Error("Falta la variable de entorno MONGODB_URI. Configúrala en Vercel con tu string de Atlas.");
+}
 
 type MongooseCache = {
   conn: typeof mongoose | null;
