@@ -1,29 +1,21 @@
-
 "use server";
 
-import mongoose from "mongoose";
 import { connectMongo } from "../lib/mongodb";
+import { Reseña } from "../models";
 
-const reseñaSchema = new mongoose.Schema({
-  libroId: String,
-  usuario: String,
-  texto: String,
-  fecha: String,
-  rating: Number,
-  likes: Number,
-  dislikes: Number,
-});
-
-const Reseña = mongoose.models.Reseña || mongoose.model("Reseña", reseñaSchema);
-
-export async function serverActionGuardarReseña(libroId: string, usuario: string, texto: string, rating: number) {
+export async function serverActionGuardarReseña(
+  libroId: string,
+  usuarioId: string,
+  texto: string,
+  rating: number
+) {
   await connectMongo();
-  if (!libroId || !usuario || !texto || rating === undefined || rating === null) {
+  if (!libroId || !usuarioId || !texto || rating === undefined || rating === null) {
     throw new Error("Faltan datos requeridos para guardar la reseña");
   }
   const nuevaReseña = new Reseña({
     libroId,
-    usuario,
+    usuarioId,
     texto,
     fecha: new Date().toISOString(),
     rating,
@@ -39,12 +31,16 @@ export async function serverActionObtenerReseñas(libroId: string) {
   return await Reseña.find({ libroId });
 }
 
-export async function serverActionVotarReseña(libroId: string, reseñaId: string, tipo: 'like' | 'dislike') {
+export async function serverActionVotarReseña(
+  libroId: string,
+  reseñaId: string,
+  tipo: "like" | "dislike"
+) {
   await connectMongo();
   const reseña = await Reseña.findById(reseñaId);
   if (reseña) {
-    if (tipo === 'like') reseña.likes++;
-    if (tipo === 'dislike') reseña.dislikes++;
+    if (tipo === "like") reseña.likes++;
+    if (tipo === "dislike") reseña.dislikes++;
     await reseña.save();
   }
   return await Reseña.find({ libroId });
