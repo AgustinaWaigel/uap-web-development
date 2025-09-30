@@ -1,6 +1,11 @@
 import { createPublicClient, createWalletClient, http, getContract, parseEther } from 'viem'
 import { sepolia } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
+import dotenv from 'dotenv'
+
+// Load environment variables
+console.log('🔗 Loading blockchain service...')
+dotenv.config()
 
 // Contract ABI for the FaucetToken
 const FAUCET_TOKEN_ABI = [
@@ -41,29 +46,78 @@ const FAUCET_TOKEN_ABI = [
   },
 ] as const
 
+// Validate environment variables and initialize clients
+console.log('✅ Validating environment variables...')
+
+if (!process.env.PRIVATE_KEY) {
+  console.error('❌ PRIVATE_KEY environment variable is not set')
+  throw new Error('PRIVATE_KEY environment variable is not set')
+}
+console.log('✅ PRIVATE_KEY is set')
+
+if (!process.env.RPC_URL) {
+  console.error('❌ RPC_URL environment variable is not set')
+  throw new Error('RPC_URL environment variable is not set')
+}
+console.log('✅ RPC_URL is set:', process.env.RPC_URL)
+
+if (!process.env.CONTRACT_ADDRESS) {
+  console.error('❌ CONTRACT_ADDRESS environment variable is not set')
+  throw new Error('CONTRACT_ADDRESS environment variable is not set')
+}
+console.log('✅ CONTRACT_ADDRESS is set:', process.env.CONTRACT_ADDRESS)
+
+// Format private key (add 0x prefix if not present)
+console.log('🔑 Formatting private key...')
+const privateKey = process.env.PRIVATE_KEY.startsWith('0x') 
+  ? process.env.PRIVATE_KEY 
+  : `0x${process.env.PRIVATE_KEY}`
+
+console.log('🔑 Private key formatted, length:', privateKey.length)
+
+// Declare variables outside try-catch for global access
+let publicClient: any
+let walletClient: any
+let faucetContract: any
+let account: any
+
 // Create clients
-const publicClient = createPublicClient({
-  chain: sepolia,
-  transport: http(process.env.RPC_URL),
-})
+try {
+  console.log('🌐 Creating Ethereum clients...')
+  console.log('🌐 Using RPC URL:', process.env.RPC_URL)
 
-const account = privateKeyToAccount(process.env.PRIVATE_KEY! as `0x${string}`)
+  publicClient = createPublicClient({
+    chain: sepolia,
+    transport: http(process.env.RPC_URL),
+  })
 
-const walletClient = createWalletClient({
-  account,
-  chain: sepolia,
-  transport: http(process.env.RPC_URL),
-})
+  console.log('👤 Creating account from private key...')
+  account = privateKeyToAccount(privateKey as `0x${string}`)
+  console.log('👤 Account created:', account.address)
 
-// Create contract instance
-const faucetContract = getContract({
-  address: process.env.CONTRACT_ADDRESS! as `0x${string}`,
-  abi: FAUCET_TOKEN_ABI,
-  client: {
-    public: publicClient,
-    wallet: walletClient,
-  },
-})
+  walletClient = createWalletClient({
+    account,
+    chain: sepolia,
+    transport: http(process.env.RPC_URL),
+  })
+
+  // Create contract instance
+  faucetContract = getContract({
+    address: process.env.CONTRACT_ADDRESS! as `0x${string}`,
+    abi: FAUCET_TOKEN_ABI,
+    client: {
+      public: publicClient,
+      wallet: walletClient,
+    },
+  })
+
+  console.log('✅ All blockchain components initialized successfully!')
+
+} catch (error) {
+  console.error('❌ Error initializing blockchain service:', error)
+  console.error('❌ Stack trace:', error instanceof Error ? error.stack : 'No stack trace')
+  // Don't throw here, let the server start but log the error
+}
 
 export class BlockchainService {
   static async hasAddressClaimed(address: string): Promise<boolean> {

@@ -1,19 +1,13 @@
 import { http, createConfig } from 'wagmi'
 import { sepolia } from 'wagmi/chains'
-import { walletConnect, injected } from 'wagmi/connectors'
-
-// Get projectId from https://cloud.walletconnect.com
-const projectId = 'your-project-id'
-
-if (!projectId) throw new Error('Project ID is not defined')
+import { injected } from 'wagmi/connectors'
 
 export const config = createConfig({
   chains: [sepolia],
   transports: {
-    [sepolia.id]: http(),
+    [sepolia.id]: http('https://ethereum-sepolia-rpc.publicnode.com'),
   },
   connectors: [
-    walletConnect({ projectId }),
     injected({ shimDisconnect: false }),
   ],
 })
