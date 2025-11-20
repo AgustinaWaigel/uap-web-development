@@ -1,9 +1,9 @@
-import Chat from '@/components/Chat';
+import TodoManager from '@/components/TodoManager';
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      <Chat />
+    <main className="min-h-screen bg-slate-900">
+      <TodoManager />
     </main>
   );
 }

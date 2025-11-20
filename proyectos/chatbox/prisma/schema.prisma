@@ -1,0 +1,26 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Task {
+  id         String    @id @default(cuid())
+  title      String
+  description String? 
+  completed  Boolean   @default(false)
+  // Use plain strings for priority and category to maximize connector compatibility
+  priority   String    @default("medium")
+  category   String    @default("other")
+  dueDate    DateTime?
+  deleted    Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([title])
+  @@index([priority])
+  @@index([category])
+}
