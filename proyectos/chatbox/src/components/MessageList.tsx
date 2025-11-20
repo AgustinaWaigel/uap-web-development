@@ -50,14 +50,14 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
           <div
             className={`max-w-[80%] rounded-2xl px-4 py-3 ${
               message.role === 'user'
-                ? 'bg-purple-600 text-white'
-                : 'bg-slate-800 text-gray-100 border border-slate-700'
+                ? 'bg-pink-950 text-white border border-pink-100'
+                : 'bg-pink-800 text-gray-100 border border-pink-100'
             }`}
           >
             <div className="flex items-start gap-3">
               {message.role === 'assistant' && (
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
-                  AI
+                <div className="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
+                  <img src="/bertram.jpg" alt="IA" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.innerHTML = '<div class=\"w-full h-full flex items-center justify-center text-white font-bold\">AI</div>'; }} />
                 </div>
               )}
               <div className="flex-1 min-w-0">
@@ -82,11 +82,11 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
       ))}
 
       {isLoading && (
-        <div className="flex justify-start">
-          <div className="max-w-[80%] rounded-2xl px-4 py-3 bg-slate-800 border border-slate-700">
+        <div className="flex justify-start max-w-[100%]">
+          <div className="max-w-[100%] rounded-2xl px-4 py-3 bg-slate-800 border border-slate-700">
             <div className="flex items-center gap-3">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
-                AI
+              <div className="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
+                <img src="/bertram.jpg" alt="IA" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.innerHTML = '<div class=\"w-full h-full flex items-center justify-center text-white font-bold\">AI</div>'; }} />
               </div>
               <div className="flex gap-1">
                 <div className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0ms' }}></div>

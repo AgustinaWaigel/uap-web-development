@@ -9,10 +9,10 @@ interface ChatInputProps {
 
 export default function ChatInput({ input, handleInputChange, handleSubmit, isLoading }: ChatInputProps) {
   return (
-    <div className="border-t border-slate-700 bg-slate-900/50 backdrop-blur-lg p-4">
-      <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
-        <div className="flex gap-3 items-end">
-          <div className="flex-1 relative">
+    <div className="border-t border-white bg-pink-500/50 backdrop-blur-lg p-4 w-full">
+      <form onSubmit={handleSubmit} className="w-full">
+        <div className="flex gap-3 items-end w-full">
+          <div className="flex-1 relative w-full">
             <input
               type="text"
               value={input}
@@ -49,7 +49,7 @@ export default function ChatInput({ input, handleInputChange, handleSubmit, isLo
             )}
           </button>
         </div>
-        <div className="mt-2 text-xs text-gray-500 text-center">
+        <div className="mt-2 text-xs text-gray-500 text-center w-full">
           Powered by OpenRouter • Next.js • Vercel AI SDK
         </div>
       </form>

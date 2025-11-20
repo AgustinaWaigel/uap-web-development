@@ -8,6 +8,7 @@ import {
   getTaskStatsTool,
   completeTaskTool
 } from '../../../../lib/tools'
+import { checkRateLimit, getClientIdentifier } from '../../../../lib/rate-limit'
 
 // Explicitly set runtime to nodejs
 export const runtime = 'nodejs'
@@ -105,6 +106,27 @@ const tools = [
 
 export async function POST(request: Request) {
   try {
+    // Rate limiting check
+    const clientId = getClientIdentifier(request)
+    const rateLimitResult = checkRateLimit(clientId)
+    
+    if (!rateLimitResult.success) {
+      const resetDate = new Date(rateLimitResult.resetTime)
+      return NextResponse.json({ 
+        error: 'Rate limit exceeded',
+        message: `Has excedido el límite de ${rateLimitResult.limit} requests. Intenta nuevamente después de ${resetDate.toLocaleTimeString('es-ES')}.`,
+        retryAfter: Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000)
+      }, { 
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': rateLimitResult.limit.toString(),
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': rateLimitResult.resetTime.toString(),
+          'Retry-After': Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000).toString()
+        }
+      })
+    }
+
     const body = await request.json()
     
     // Validate with better error handling
