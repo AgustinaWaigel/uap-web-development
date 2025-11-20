@@ -97,6 +97,91 @@ export async function searchTasksTool(params: any) {
   return { tasks, total }
 }
 
+export async function completeTaskTool(params: any) {
+  try {
+    const { taskName } = params
+    if (!taskName || typeof taskName !== 'string') {
+      throw new Error('taskName is required')
+    }
+
+    console.log('completeTaskTool: Searching for task:', taskName)
+    
+    // Search for tasks (case-insensitive for SQLite - do comparison in code)
+    const allPendingTasks = await prisma.task.findMany({
+      where: {
+        deleted: false,
+        completed: false
+      }
+    })
+    
+    // Filter manually for case-insensitive search (SQLite doesn't support mode: 'insensitive')
+    const taskNameLower = taskName.toLowerCase()
+    const tasks = allPendingTasks.filter(task => 
+      task.title.toLowerCase().includes(taskNameLower) ||
+      (task.description && task.description.toLowerCase().includes(taskNameLower))
+    ).slice(0, 10)
+    
+    console.log(`completeTaskTool: Found ${tasks.length} task(s) matching "${taskName}"`)
+
+    if (tasks.length === 0) {
+      throw new Error(`❌ No se encontró ninguna tarea pendiente con el nombre "${taskName}". Verifica el nombre e intenta nuevamente.`)
+    }
+
+    // Separate exact matches from partial matches
+    const exactMatches = tasks.filter(t => t.title.toLowerCase() === taskNameLower)
+  
+  // If we have exact matches, use only those; otherwise use all matches
+  const tasksToProcess = exactMatches.length > 0 ? exactMatches : tasks
+  
+  console.log(`completeTaskTool: ${exactMatches.length} exact match(es), ${tasks.length} total match(es)`)
+
+  // Check if we have multiple different task names
+  const uniqueTitles = new Set(tasksToProcess.map(t => t.title.toLowerCase()))
+  const allSameTitle = uniqueTitles.size === 1
+
+  if (tasksToProcess.length > 1 && !allSameTitle) {
+    // Multiple different tasks - ask user to be more specific
+    const taskList = tasksToProcess.map((t, i) => `${i + 1}. "${t.title}" (${t.priority} priority, ${t.category})`).join('\n')
+    return {
+      multipleMatches: true,
+      count: tasksToProcess.length,
+      message: `⚠️ Encontré ${tasksToProcess.length} tareas diferentes que coinciden:\n\n${taskList}\n\nPor favor, usa el nombre exacto de la tarea que quieres completar.`,
+      tasks: tasksToProcess.map(t => ({ id: t.id, title: t.title, priority: t.priority, category: t.category }))
+    }
+  }
+
+  // Complete all tasks (either one task, or multiple with same exact name)
+  const updatePromises = tasksToProcess.map(task => 
+    prisma.task.update({
+      where: { id: task.id },
+      data: { completed: true }
+    })
+  )
+
+  const updatedTasks = await Promise.all(updatePromises)
+  
+  console.log(`completeTaskTool: Marked ${updatedTasks.length} task(s) as completed`)
+  
+    if (updatedTasks.length === 1) {
+      return {
+        success: true,
+        message: `✅ Tarea "${updatedTasks[0].title}" marcada como completada`,
+        task: updatedTasks[0]
+      }
+    } else {
+      return {
+        success: true,
+        message: `✅ ${updatedTasks.length} tareas con el nombre "${updatedTasks[0].title}" marcadas como completadas`,
+        tasks: updatedTasks,
+        count: updatedTasks.length
+      }
+    }
+  } catch (error: any) {
+    console.error('completeTaskTool ERROR:', error)
+    throw new Error(`Error al completar tarea: ${error.message || String(error)}`)
+  }
+}
+
 export async function getTaskStatsTool(params: any) {
   const { period = 'all-time' } = params || {}
   const now = new Date()

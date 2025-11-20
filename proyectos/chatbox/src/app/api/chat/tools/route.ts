@@ -5,7 +5,8 @@ import {
   updateTaskTool,
   deleteTaskTool,
   searchTasksTool,
-  getTaskStatsTool
+  getTaskStatsTool,
+  completeTaskTool
 } from '../../../../lib/tools'
 
 // Explicitly set runtime to nodejs
@@ -36,6 +37,17 @@ const tools = [
         description: { type: 'string' }
       },
       required: ['title']
+    }
+  },
+  {
+    name: 'completeTask',
+    description: 'Mark a task as completed by searching for it by name/title. Use this when user wants to complete/finish a task.',
+    parameters: {
+      type: 'object',
+      properties: {
+        taskName: { type: 'string', description: 'The name or title of the task to mark as completed' }
+      },
+      required: ['taskName']
     }
   },
   {
@@ -129,35 +141,37 @@ export async function POST(request: Request) {
     // Add system prompt to guide the LLM
     const systemPrompt = {
       role: 'system',
-      content: `You are a helpful AI task manager assistant. IMPORTANT RULES for task operations:
+      content: `You are a helpful AI task manager assistant. You MUST use the available tools/functions to help users manage their tasks.
 
-When users ask you to UPDATE or DELETE a task by name/title (NOT by ID):
-1. ALWAYS use searchTasks first to find the task and get its taskId
-2. Then use updateTask or deleteTask with that taskId
-3. If multiple tasks match, ask the user which one they mean
+CRITICAL RULES FOR COMPLETING TASKS:
+- When user wants to mark a task as completed/done/finished, use completeTask(taskName="task name")
+- The completeTask tool will automatically find and complete the task in ONE STEP
+- DO NOT use searchTasks + updateTask for completing, just use completeTask directly
 
-When marking tasks as COMPLETE or COMPLETED:
-1. Use searchTasks to find the task by name/title
-2. Use updateTask with taskId and completed=true (MUST BE TRUE, NOT FALSE)
-3. Confirm to user with: "✅ Marked '[task name]' as completed!"
+OTHER OPERATIONS:
+- Create new task: use createTask(title="...")
+- Show tasks: use searchTasks()
+- Update task details: use searchTasks first, then updateTask with taskId
+- Delete task: use searchTasks first, then deleteTask with taskId
+- Get statistics: use getTaskStats()
 
-When marking tasks as INCOMPLETE or PENDING:
-1. Use searchTasks to find the task
-2. Use updateTask with taskId and completed=false
-3. Confirm to user
+Examples:
+User: "marca completada la tarea comprar leche"
+→ Call completeTask(taskName="comprar leche")
 
-Example flows:
-User: "Marca como completada la tarea de comprar leche"
-1. searchTasks with query="comprar leche"
-2. Get taskId from results
-3. updateTask with taskId and completed=true
-4. Respond: "✅ Marked 'comprar leche' as completed!"
+User: "completa la tarea de estudiar"  
+→ Call completeTask(taskName="estudiar")
 
-User: "Complete the buy milk task"
-1. searchTasks with query="buy milk"
-2. Get taskId from results  
-3. updateTask with taskId and completed=true
-4. Respond: "✅ Marked 'buy milk' as completed!"`
+User: "termina la tarea X"
+→ Call completeTask(taskName="X")
+
+User: "crea tarea X"
+→ Call createTask(title="X")
+
+User: "muestra mis tareas"
+→ Call searchTasks()
+
+ALWAYS USE THE TOOLS. DO NOT just respond with text, USE THE FUNCTIONS!`
     }
     
     const messagesWithSystem = [systemPrompt, ...parsed.messages]
@@ -167,35 +181,61 @@ User: "Complete the buy milk task"
       messages: messagesWithSystem, 
       tools: openaiTools, 
       tool_choice: 'auto',
-      temperature: 0 
+      temperature: 0.1,
+      max_tokens: 1000
     }
     
-    console.log('Calling OpenRouter with:', JSON.stringify(requestBody, null, 2))
+    console.log('\n=== CALLING OPENROUTER ===')
+    console.log('Model:', model)
+    console.log('Messages count:', messagesWithSystem.length)
+    console.log('Last user message:', parsed.messages[parsed.messages.length - 1]?.content)
     
     const resp = await fetch(`${baseURL}/chat/completions`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/AgustinaWaigel/uap-web-development',
+        'X-Title': 'AI Todo Manager'
       },
       body: JSON.stringify(requestBody)
     })
 
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}))
-      console.error('OpenRouter API error:', {
-        status: resp.status,
-        statusText: resp.statusText,
-        error: err
-      })
+      const errText = await resp.text()
+      let err: any
+      try {
+        err = JSON.parse(errText)
+      } catch {
+        err = { message: errText }
+      }
+      console.error('\n=== OPENROUTER ERROR ===')
+      console.error('Status:', resp.status, resp.statusText)
+      console.error('Error:', JSON.stringify(err, null, 2))
+      console.error('Model:', model)
+      
+      let errorMessage = err?.error?.message || err?.message || errText
+      
+      // Provide helpful error messages
+      if (resp.status === 429) {
+        errorMessage = `El modelo ${model} ha alcanzado su límite de uso. Por favor, cambia el modelo en .env.local a: meta-llama/llama-3.2-3b-instruct:free`
+      } else if (resp.status === 401) {
+        errorMessage = 'API Key inválida. Verifica tu OPENROUTER_API_KEY en .env.local'
+      } else if (resp.status === 400) {
+        errorMessage = `El modelo ${model} no soporta function calling o los parámetros son inválidos`
+      }
+      
       return NextResponse.json({ 
         error: 'LLM error', 
         details: err,
-        message: `OpenRouter returned ${resp.status}: ${JSON.stringify(err)}`
-      }, { status: 500 }) // Always return 500 to client, log actual status
+        message: `Error (${resp.status}): ${errorMessage}`
+      }, { status: 500 })
     }
 
     const data = await resp.json()
+    console.log('\n=== OPENROUTER RESPONSE ===')
+    console.log('Response:', JSON.stringify(data, null, 2))
+    
     const choice = data?.choices?.[0]
 
     // If model wants to call a tool (OpenAI tools format)
@@ -214,6 +254,11 @@ User: "Complete the buy milk task"
         switch (name) {
           case 'createTask':
             toolResult = await createTaskTool(args)
+            break
+          case 'completeTask':
+            console.log('Executing completeTask with args:', args)
+            toolResult = await completeTaskTool(args)
+            console.log('completeTask result:', JSON.stringify(toolResult, null, 2))
             break
           case 'updateTask':
             console.log('Executing updateTask with args:', args)
@@ -251,10 +296,21 @@ User: "Complete the buy milk task"
         }
       ]
 
+      console.log('\n=== MAKING FINAL CALL TO GET RESPONSE ===')
+      console.log('Tool result being sent to model:', JSON.stringify(toolResult, null, 2))
+
+      // Make another call with tools available so model can make follow-up tool calls
       const finalResp = await fetch(`${baseURL}/chat/completions`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages: messagesWithTool, temperature: 0.7, max_tokens: 800 })
+        body: JSON.stringify({ 
+          model, 
+          messages: [systemPrompt, ...messagesWithTool], 
+          tools: openaiTools,
+          tool_choice: 'auto',
+          temperature: 0.1, 
+          max_tokens: 1000 
+        })
       })
 
       if (!finalResp.ok) {
@@ -263,14 +319,139 @@ User: "Complete the buy milk task"
       }
 
       const finalData = await finalResp.json()
-      const finalText = finalData?.choices?.[0]?.message?.content || ''
-
+      console.log('\n=== FINAL RESPONSE FROM MODEL ===')
+      console.log('Response:', JSON.stringify(finalData, null, 2))
+      
+      const finalChoice = finalData?.choices?.[0]
+      
+      // Check if model wants to make ANOTHER tool call (for multi-step operations)
+      if (finalChoice?.message?.tool_calls && finalChoice.message.tool_calls.length > 0) {
+        const secondToolCall = finalChoice.message.tool_calls[0]
+        const { name: secondName, arguments: secondArgsRaw } = secondToolCall.function
+        let secondArgs: any = {}
+        try { secondArgs = JSON.parse(secondArgsRaw || '{}') } catch (e) { secondArgs = {} }
+        
+        console.log('\n=== SECOND TOOL CALL ===')
+        console.log('Tool:', secondName)
+        console.log('Args:', JSON.stringify(secondArgs, null, 2))
+        
+        // Execute second tool
+        let secondToolResult: any
+        try {
+          switch (secondName) {
+            case 'createTask':
+              secondToolResult = await createTaskTool(secondArgs)
+              break
+            case 'completeTask':
+              console.log('Executing second completeTask with args:', secondArgs)
+              secondToolResult = await completeTaskTool(secondArgs)
+              break
+            case 'updateTask':
+              console.log('Executing second updateTask with args:', secondArgs)
+              secondToolResult = await updateTaskTool(secondArgs)
+              break
+            case 'deleteTask':
+              secondToolResult = await deleteTaskTool(secondArgs)
+              break
+            case 'searchTasks':
+              secondToolResult = await searchTasksTool(secondArgs)
+              break
+            case 'getTaskStats':
+              secondToolResult = await getTaskStatsTool(secondArgs)
+              break
+            default:
+              secondToolResult = { error: 'unknown tool' }
+          }
+          
+          // Make final call to get human-readable response
+          const messagesWithSecondTool = [
+            ...messagesWithTool,
+            {
+              role: 'assistant',
+              content: null,
+              tool_calls: [secondToolCall]
+            },
+            {
+              role: 'tool',
+              content: JSON.stringify(secondToolResult),
+              tool_call_id: secondToolCall.id
+            }
+          ]
+          
+          const thirdResp = await fetch(`${baseURL}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              model, 
+              messages: [systemPrompt, ...messagesWithSecondTool], 
+              temperature: 0.7, 
+              max_tokens: 500 
+            })
+          })
+          
+          if (!thirdResp.ok) {
+            return NextResponse.json({ 
+              success: true, 
+              tool: `${name} + ${secondName}`, 
+              toolResult: secondToolResult, 
+              assistant: `✅ Ejecuté ${name} y luego ${secondName}` 
+            })
+          }
+          
+          const thirdData = await thirdResp.json()
+          const finalText = thirdData?.choices?.[0]?.message?.content || `✅ Operación completada: ${name} → ${secondName}`
+          
+          return NextResponse.json({ 
+            success: true, 
+            tool: `${name} + ${secondName}`, 
+            toolResult: secondToolResult, 
+            assistant: finalText 
+          })
+          
+        } catch (toolErr: any) {
+          return NextResponse.json({ 
+            success: false, 
+            tool: secondName, 
+            error: String(toolErr) 
+          })
+        }
+      }
+      
+      // No second tool call, return first tool result
+      let finalText = finalChoice?.message?.content || ''
+      
+      // If tool result has a message field (like completeTask with multiple matches), use it if model didn't respond
+      if (!finalText && toolResult?.message) {
+        finalText = toolResult.message
+      }
+      
+      // If still no text and task was completed successfully, provide default message
+      if (!finalText && toolResult?.success) {
+        finalText = toolResult.message || `✅ Operación completada exitosamente`
+      }
+      
+      console.log('Final assistant text:', finalText)
       return NextResponse.json({ success: true, tool: name, toolResult, assistant: finalText })
     }
 
     // If no function call, return assistant message directly
     const assistantText = choice?.message?.content || ''
-    return NextResponse.json({ success: true, assistant: assistantText })
+    console.log('\n=== NO TOOL CALLED ===')
+    console.log('Model responded with text only:', assistantText)
+    console.log('User message was:', parsed.messages[parsed.messages.length - 1]?.content)
+    
+    // If the user seems to be asking for a task operation but model didn't use tools, warn them
+    const userMsg = parsed.messages[parsed.messages.length - 1]?.content.toLowerCase() || ''
+    const isTaskOperation = /creat|agregar|nueva|complet|marca|borra|elimina|muestra|lista|busca/i.test(userMsg)
+    
+    if (isTaskOperation && !assistantText) {
+      return NextResponse.json({ 
+        success: true, 
+        assistant: '⚠️ El modelo no pudo procesar tu solicitud. Intenta ser más específico o prueba con otro modelo en .env.local (ej: meta-llama/llama-3.1-8b-instruct:free)' 
+      })
+    }
+    
+    return NextResponse.json({ success: true, assistant: assistantText || '🤔 No tengo respuesta para eso' })
 
   } catch (err: any) {
     console.error('Error in chat/tools endpoint:', err)
