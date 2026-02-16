@@ -1,0 +1,26 @@
+name: Test on Pull Request
+
+on:
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install dependencies
+        run: |
+          cd proyectos/tema1/libro-resenas
+          npm ci
+      - name: Run tests
+        run: |
+          cd proyectos/tema1/libro-resenas
+          npm test
